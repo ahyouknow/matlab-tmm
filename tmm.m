@@ -5,28 +5,33 @@ classdef tmm
 	%
 	%%% TODO %%%
 	%
-	% Picking between S and P waves
 	% Impelementing incoherent and partially incoherent layers
-	% Make calculations faster by creating a list of refraction angles instead of calculating it each time
 	% More explanations and comments
 	%
 	%%% END %%%
     
     properties
-		n_list     % List of refraction indexes
+		n_matrix   % Index of refraction matrix. Columns are for each unique material and rows are at each wavelength
 		d_list     % List of layer thicknesses in meters
 		num_layers % Total number of layers
 		wvl_list   % List of all wavelengths to simulate in meters
 		th_i_list  % List of all initial incident angles to simulate inputed as degrees
+		type       % can either be S (TE) or P (TM). default is S.
     end
     
     methods
-        function obj = tmm(n_list, d_list, num_layers, wvl_list, th_i_list) 
-			obj.n_list	   = n_list;
+        function obj = tmm(n_matrix, d_list, num_layers, type, wvl_list, th_i_list) 
+			obj.n_matrix   = n_matrix;
 			obj.d_list     = d_list;
 			obj.num_layers = num_layers;
 			obj.wvl_list   = wvl_list;
 			obj.th_i_list  = th_i_list * pi/180;
+			if (type == "TM" || type == "P")
+				obj.type = "P";
+			else
+				obj.type = "S";
+			end
+
         end
 
 		% Goes through each wavelength and each angle.
@@ -37,13 +42,15 @@ classdef tmm
 			t_matrix = [];
 			r_matrix = [];
 			for wvl_index = 1:1:size(obj.wvl_list, 2)
+				wvl    = obj.wvl_list(wvl_index);
+				n_row  = mod(wvl_index - 1, size(obj.n_matrix, 1)) + 1;
+				n_layers = obj.n_matrix(n_row, :);
 				t_list = [];
 				r_list = [];
 				for th_i_index = 1:1:size(obj.th_i_list, 2)
-					wvl  = obj.wvl_list(wvl_index);
 					th_i = obj.th_i_list(th_i_index);
 
-					[r t] = obj.sim_coh(wvl, th_i); 
+					[r t] = obj.sim_coh(n_layers, wvl, th_i); 
 					t_list = [ t_list t ];
 				    r_list = [ r_list r ];
 				end
@@ -54,69 +61,114 @@ classdef tmm
 			r_results = r_matrix;
 		end
         
-        function [r0,t0] = sim_coh(obj, wvl, initial_th_i)
-			layer_repeat = size(obj.n_list, 2);
+        function [r0,t0] = sim_coh(obj, n_list, wvl, initial_th_i)
+			unique_layers = size(n_list, 2);
 
-			n1   = 1.000293; % index of refraction for air
-			n2   = obj.n_list(1);
-			th_f = snells_law(n1, n2, initial_th_i);
-			dis  = obj.d_list(1);
-			tm   = t_layer_TE(n1, n2, initial_th_i, th_f);
-            T    = (1 / tm) * transmission_matrix(tm);
-
-			for layer = 2:1:(obj.num_layers - 1)
-				layer_index = mod(layer - 1, layer_repeat) + 1;
-
-				n1  = n2;
-				n2  = obj.n_list(layer_index);
-
-
+			n2   = 1.000293; % index of refraction for air
+			th_f = initial_th_i;
+			th_f_list = [];
+			for i=1:1:unique_layers
 				th_i = th_f;
+				n1   = n2;
+				n2   = n_list(i);
 				th_f = snells_law(n1, n2, th_i);
-				tm   = t_layer_TE(n1, n2, th_i, th_f);
+				th_f_list = [th_f_list th_f];
 
-				Pm   = propagation_matrix(n2, dis, th_i, wvl);
-				DmDn = transmission_matrix(tm);
-				T    = T * (1/tm) * Pm * DmDn;
-
-				dis = obj.d_list(layer_index);
 			end
-			r = T(3) / T(1);
-			t = 1 / T(1);
+
+			n1 = n_list(unique_layers);
+			th_i = th_f_list(unique_layers);
+			r_list = [];
+			t_list = [];
+			for i=1:1:unique_layers
+				n2   = n_list(i);
+				th_f = th_f_list(i);
+
+				[r t] = obj.rt_layer(n1, n2, th_i, th_f);
+				r_list = [ r_list r ];
+				t_list = [ t_list t ];
+
+				n1 = n2;
+				th_i = th_f;
+			end
+			n1 = 1.000293;
+			n2 = n_list(i);
+			d  = obj.d_list(1);
+			th_f = th_f_list(i);
+			[ r1 t1 ] = obj.rt_layer(n1, n2, initial_th_i, th_f);
+
+			delta = (2*pi * n1 * d*cos(th_i)) /...
+						          wvl;
+
+			P_1 = [ exp(i*delta)   0;...
+			          0      exp(-i*delta) ];
+
+            T_01 = (1 / t1) * [ 1  r1;...
+					     		r1  1 ];
+			T_0n = T_01;
+
+			layer_index = 1;
+			for layer = 2:1:(obj.num_layers - 1)
+				layer_index = mod(layer - 1, unique_layers) + 1;
+				last_layer_index = mod(layer - 2, unique_layers) + 1; 
+
+				n1 = n_list(last_layer_index);
+				n2 = n_list(layer_index);
+				d  = obj.d_list(layer_index);
+
+				th_i = th_f_list(last_layer_index);
+				th_f = th_f_list(layer_index);
+
+				ri = r_list(layer_index);
+				ti = t_list(layer_index);
+
+				delta = (2*pi * n2 * d*cos(th_i)) /...
+						          wvl;
+
+				P_j = [ exp(i*delta)   0;...
+				          0      exp(-i*delta) ];
+
+            	T_ij = (1 / ti) * [ 1  ri;...
+						     		ri  1 ];
+
+				T_0n = T_0n *  P_j * T_ij;
+
+			end
+			rn = r_list(layer_index);
+			tn = t_list(layer_index);
+
+			T = T_0n;
+			r = T(2,1) / T(1,1);
+			t = 1 / T(1,1);
 
 			r0 = abs(r) ^ 2;
-			t0 = abs(t) ^ 2;
 
-			%t0 = abs(t ^ 2) * (real(n2*cos(th_f))) /...
-			%						(real(1.00293*cos(initial_th_i)));
-        end
-        
-        function [R0,T0] = sim_wavelengths(obj, wvl_lineSpace)
-            R = [];
-            T = [];
-            for wvl = wvl_lineSpace
-                obj.wvl = wvl;
-                [r t] = obj.run;
-                R = [R r];
-                T = [T t];
-            end
-            R0 = R;
-            T0 = T;
+			t0 = abs(t ^ 2) * (real(n2*cos(th_f))) /...
+							(real(1.00293*cos(initial_th_i)));
         end
 
-		function [R0,T0] = sim_aoi(obj, aoi_linespace)
-			R = [];
-			T = [];
-			for aoi = aoi_linespace
-				obj.th_i = aoi * pi / 180;
-				[r t] = obj.run;
-				R = [R r];
-				T = [T t];
+		function [r,t] = rt_layer(obj, n1, n2, th_i, th_f)
+			if (obj.type == "S")
+				r = (n1*cos(th_i) - n2*cos(th_f)) /...
+				    (n1*cos(th_i) + n2*cos(th_f));
+				t = 1 + r;
+			else
+				r = (n2*cos(th_i) - n1*cos(th_f)) /...
+				    (n2*cos(th_i) + n1*cos(th_f));
+				t = (n1/n2)*(1 + r);
 			end
-			R0 = R;
-			T0 = T;
 		end
+        
     end
+end
+
+
+function delta = phase_change(n2, d, th_i, wvl)
+
+end
+
+function th_f = snells_law(n1, n2, th_i)
+	 th_f = asin((n1/n2)*sin(th_i));
 end
 
 
@@ -136,38 +188,9 @@ function DmDn = transmission_matrix_rcalc(n1, n2, th_i, th_f)
 end
 
 function p = propagation_matrix(n2, d, th_i, wvl)
-	delta = phase_change(n2, d, th_i, wvl);
+	delta = phase_change(n2, d, th_i, wvl)
 
 	p = [ exp(i*delta)     0;...
 		       0     exp(-i*delta)];
 end
 
-function delta = phase_change(n2, d, th_i, wvl)
-
-	delta = 2*pi * n2 * d*cos(th_i) /...
-						wvl;
-end
-
-function t = t_layer_TE(n1, n2, th_i, th_f)
-	t =      (2*n1*cos(th_i)) / ...
-	    (n1*cos(th_i) + n2*cos(th_f));
-end	
-
-function r = r_layer_TE(n1, n2, th_i, th_f)
-	r = (n1*cos(th_i) - n2*cos(th_f)) /...
-	    (n1*cos(th_i) + n2*cos(th_f));
-end
-
-function t = t_layer_TM(n1, n2, th_i, th_f)
-	t =      (2*n1*cos(th_i)) / ...
-	    (n1*cos(th_f) + n2*cos(th_f));
-end	
-
-function r = r_layer_TM(n1, n2, th_i, th_f)
-	r = (n2*cos(th_i) - n1*cos(th_f)) /...
-	    (n2*cos(th_i) + n1*cos(th_f));
-end
-
-function th_f = snells_law(n1, n2, th_i)
-	 th_f = asin((n1/n2)*sin(th_i));
-end
