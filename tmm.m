@@ -1,4 +1,4 @@
-classdef tmmNew
+classdef tmm
     %	Calculates the fresnel coefficients for a multilayered material using transfer matrix method.
     %   Uses the fact that electromagnetic waves passing to and from each layer have a linear relationship
 	%	More information on tmm are at http://www.photonics.intec.ugent.be/download/ocs129.pdf and https://www.osapublishing.org/ao/abstract.cfm?uri=ao-41-19-3978
@@ -20,7 +20,7 @@ classdef tmmNew
     end
     
     methods
-        function obj = tmmNew(n_matrix, d_list, cell_num, polar, wvl_list, th_i_list) 
+        function obj = tmm(n_matrix, d_list, cell_num, polar, wvl_list, th_i_list) 
 			obj.n_matrix   = n_matrix;
 			obj.d_list     = d_list;
 			obj.cell_num   = cell_num;
