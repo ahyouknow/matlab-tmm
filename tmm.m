@@ -13,25 +13,24 @@ classdef tmm
     properties
 		n_matrix   % Index of refraction matrix. Columns are for each unique material and rows are at each wavelength.
 		d_list     % List of layer thicknesses in meters.
-		cell_num   % Number of cell units.
+		layerCount % Number of Layers
 		wvl_list   % List of all wavelengths to simulate in meters.
 		th_i_list  % List of all initial incident angles to simulate inputed as degrees.
-		polar      % Polarization: can be S (TE) or P (TM)
+		pol        % Polarization: can be S (TE) or P (TM)
     end
     
     methods
-        function obj = tmm(n_matrix, d_list, cell_num, polar, wvl_list, th_i_list) 
+        function obj = tmm(n_matrix, d_list, layerCount, pol, wvl_list, th_i_list) 
 			obj.n_matrix   = n_matrix;
 			obj.d_list     = d_list;
-			obj.cell_num   = cell_num;
+			obj.layerCount = layerCount;
 			obj.wvl_list   = wvl_list;
 			obj.th_i_list  = th_i_list * pi/180;
-
-			polar = lower(polar);
-			if (polar == "tm" || polar == "p")
-				obj.polar = "p";
-			elseif (polar == "te" || polar == "s")
-				obj.polar = "s";
+			pol = lower(pol);
+			if (pol == "tm" || pol == "p")
+				obj.pol = "p";
+			elseif (pol == "te" || pol == "s")
+				obj.pol = "s";
 			end
 
 
@@ -45,25 +44,33 @@ classdef tmm
 			% To make a surface plot with the output it would be "surf(th_i_list, wvl_list, r)".
 			% To make a 2d plot with wavelength as the x-axis "plot(wvl_list, r(:, specific_th_i))".
 			% To make a 2d plot with angle of incident as the x-axis "plot(th_i_list, r(specific_wvl, :))".
-			t_matrix = [];
-			r_matrix = [];
-			for wvl_index = 1:1:size(obj.wvl_list, 2)
+			if (size(obj.wvl_list, 1) > size(obj.wvl_list,2))
+				num_wvls = size(obj.wvl_list, 1);
+			else
+				num_wvls = size(obj.wvl_list, 2);
+			end
+
+			if (size(obj.th_i_list, 1) > size(obj.th_i_list,2))
+				num_angles = size(obj.th_i_list, 1);
+			else
+				num_angles = size(obj.th_i_list, 2);
+			end
+			t_matrix = zeros(num_wvls, num_angles);
+			r_matrix = zeros(num_wvls, num_angles);
+			parfor wvl_index = 1:1:num_wvls
 				wvl    = obj.wvl_list(wvl_index);
 				n_row  = mod(wvl_index - 1, size(obj.n_matrix, 1)) + 1;
 				n_layers = obj.n_matrix(n_row, :);
-				t_list = [];
-				r_list = [];
-				for th_i_index = 1:1:size(obj.th_i_list, 2)
+				for th_i_index = 1:1:num_angles
 					th_i = obj.th_i_list(th_i_index);
 
 					[r t] = obj.sim_coh(n_layers, wvl, th_i); 
-					t_list = [ t_list t ];
-				    r_list = [ r_list r ];
+					t_matrix(wvl_index, th_i_index) = t;
+					r_matrix(wvl_index, th_i_index) = r;
 				end
-				t_matrix = [ t_matrix; t_list ];
-				r_matrix = [ r_matrix; r_list ];
 			end
-			t_results = t_matrix; r_results = r_matrix;
+			t_results = t_matrix;
+		   	r_results = r_matrix;
 		end
         
         function [r0,t0] = sim_coh(obj, n_list, wvl, initial_th_i)
@@ -89,61 +96,88 @@ classdef tmm
 			% r0 is the final reflection coefficient 
 			% t0 is the final transmission coefficient
 			%
-			n1 = 1.000293;
+			n1 = 1.00293;
 			n2 = n_list(1);
 			th_i = initial_th_i;
 			th_f = obj.snells_law(n1, n2, initial_th_i);
 			[r t] = obj.rt_layer(n1, n2, initial_th_i, th_f);
 			T_first = (1/t) * [ 1 r; r 1 ];
-			T_cell  = [ 1 0; 0 1 ];
 
-			for layer_index = 2:1:size(n_list, 2);
-
-				n1  = n_list(layer_index - 1);
-				n2  = n_list(layer_index);
-				d   = obj.d_list(layer_index - 1);
-				phi = (2*pi/wvl) * n1 * d / cos(th_f);
-				P_i = [ exp(phi*j) 0; 0 exp(-1*phi*j) ];
-				th_i = th_f;
-				th_f = obj.snells_law(n1, n2, th_i);
-				[r t] = obj.rt_layer(n1, n2, th_i, th_f);
-				T_ij = (1/t) * [ 1 r; r 1 ];
-
-				T_cell = T_cell * P_i * T_ij;
+			th_f_list = obj.snells_list(n_list, initial_th_i);
+			[T_list, P_list] = obj.matrix_list(n_list, th_f_list, wvl);
+			T =  T_first;
+			layer_index = 1;
+			for i = 2:1:obj.layerCount
+				T = T * P_list{layer_index};
+				layer_index = mod(i - 1, size(obj.d_list, 2)) + 1;
+				T = T * T_list{layer_index};
 			end
-			if (obj.cell_num > 1)
-				n1 = n_list(size(n_list, 2));
-				n2 = n_list(1);
-				phi = (2*pi/wvl) * n1 * obj.d_list(size(obj.d_list, 2)) / cos(th_f);
-				P_n = [ exp(phi*j) 0; 0 exp(-1*phi*j) ];
-				th_i = th_f;
-				th_f = obj.snells_law(n1, n2, th_i);
-				[r t] = obj.rt_layer(n1, n2, th_i, th_f);
-				T_n1  = (1/t) * [ 1 r; r 1 ];
 
-				T = ( T_cell * P_n * T_n1 ) ^ (obj.cell_num - 1);
-				T = T * T_cell;
-			else
-				T = T_cell;
-			end
-			T = T_first * T_cell;
+
+			n1 = n_list(layer_index);
+			n2 = 1.00293;
+			th_i = th_f_list(layer_index);
+			th_f = obj.snells_law(n1, n2, th_i);
+			[r t] = obj.rt_layer(n1, n2, th_i, th_f);
+			P = P_list{layer_index};
+			T_last = (1/t) * [ 1 r; r 1 ];
+			T = T * P * T_last;
 
 			r  = T(2,1)/ T(1,1);
 			t  =   1   / T(1,1);
-
-			r0 = abs(r) ^ 2;
-			t0 = (abs(t) ^ 2) * (real(n2*cos(th_f))) /...
-							(real(1.00293*cos(initial_th_i)));
+			if (isnan(r) && ( isnan(t) || t == 0))
+				r = 1;
+				t = 0;
+			end
+			r0 = (abs(r)^2);
+			t0 = (abs(t)^2) * ((real(1.000293*cos(th_f)))) /...
+							((1.000293*cos(initial_th_i)));
         end
 
+		function [T_list, P_list] = matrix_list(obj, n_list, th_f_list, wvl)
+			n1 = n_list(size(n_list,2));
+			th_i = th_f_list(size(th_f_list, 2));
+			t_list = cell(1,size(n_list,2));
+			p_list = cell(1,size(n_list,2));
+			for i=1:1:size(n_list, 2);
+				d  = obj.d_list(i);
+				n2 = n_list(i);
+				th_f = th_f_list(i);
+				phi = 2*pi * n2 * d * cos(th_f) / wvl;
+				[r_i, t_i] = obj.rt_layer(n1, n2, th_i, th_f);
+				P_i = [ exp(-1j*phi) 0; 0 exp(1j*phi) ];
+				T_i = (1/t_i) * [ 1 r_i; r_i 1 ];
+				t_list{i} = T_i;
+				p_list{i} = P_i;
+				n1 = n2;
+				th_i = th_f;
+			end
+			T_list = t_list;
+			P_list = p_list;
+		end
+
+		function th_f_list = snells_list(obj, n_list, initial_th_i)
+			n1   = 1;
+			n2   = n_list(1);
+			th_f = obj.snells_law(n1, n2, initial_th_i);
+			temp = [th_f];
+			for i=2:1:size(n_list,2)
+				n1 = n2;
+				n2 = n_list(i);
+				th_f = obj.snells_law(n1, n2, th_f);
+				temp = [temp th_f ];
+			end
+			th_f_list = temp;
+		end
+
 		function th_f = snells_law(obj, n1, n2, th_i)
-			 th_f = asin((n1/n2)*sin(th_i));
+			 th_f = real(asin((n1/n2)*sin(th_i)));
 		end
 
 		function [r,t] = rt_layer(obj, n1, n2, th_i, th_f)
-			if (obj.polar == "s") 
+			if (obj.pol == "s") 
 				[r t] = obj.fresnel_S(n1, n2, th_i, th_f);
-			elseif (obj.polar == "p")
+			elseif (obj.pol == "p")
 				[r t] = obj.fresnel_P(n1, n2, th_i, th_f);
 			end
 		end
