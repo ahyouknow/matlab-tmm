@@ -64,12 +64,21 @@ function [r0,t0] = main(n_list, d_list, layerCount, wvl, initial_th_i, pol, n_fi
 
 	structCount = floor(layerCount/structureLayers);
 	if (structCount > 1)
-		T = T * (T_list{1} * T)^(structCount - 1);
+		Tstruct = T_list{1} * T;
+		n = structCount - 1;
+		T = T * (expRec(Tstruct, n));
+
+		%T = T * (T_list{1} * T)^(structCount - 1);;
 	end
 	leftOverLayers = mod(layerCount, structureLayers);
 	for i = 1:1:leftOverLayers
 		T = T * T_list{i};
 		T = T * P_list{i};
+	end
+	if (leftOverLayers == 0)
+		i = structureLayers;
+	else 
+		i = leftOverLayers;
 	end
 
 	n1 = n_list(i);
@@ -77,7 +86,6 @@ function [r0,t0] = main(n_list, d_list, layerCount, wvl, initial_th_i, pol, n_fi
 	th_i = th_f_list(i);
 	th_f = snells_law(n1, n2, th_i);
 	[r t] = rt_layer(n1, n2, th_i, th_f, pol);
-	%P = P_list{layer_index};
 	T_last = (1/t) * [ 1 r; r 1 ];
 	
 	T = T_first * T * T_last;
@@ -151,4 +159,25 @@ function [r,t] = fresnel_P(n1, n2, th_i, th_f)
 	r = (n2*cos(th_i) - n1*cos(th_f)) /...
 	    (n2*cos(th_i) + n1*cos(th_f));
 	t = (n1/n2)*(1 + r);
+end
+
+function result = expRec(A, n)
+	result = [1 0; 0 1];
+	if (n == 0)
+		result = [1 0; 0 1];
+		return
+
+	elseif (n == 1)
+		result = A;
+		return
+
+	elseif (mod(n, 2) == 0)
+		result = expRec(A * A, n / 2);
+		return
+
+	elseif (mod(n,2) == 1) 
+		result = A * expRec(A * A, (n-1) / 2);
+		return
+	end
+	return
 end
