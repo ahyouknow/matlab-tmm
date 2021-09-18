@@ -41,7 +41,7 @@ function main(wl)
 
 	set(gca, 'FontSize', 14);
 	grph = gca;
-	exportgraphics(grph, 'resultbandgap.pdf');
+	print -dpdf -bestfit resultsbandgap.pdf 
 end
 
 function rlist = plottmm(wls, n_matrix, d_list, l)

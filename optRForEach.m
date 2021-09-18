@@ -1,4 +1,4 @@
-function [mmaxDandL maxR] = main(wls, showgraph, targetR, startingL, estimate)
+function [maxDandL maxR] = main(wls, showgraph, targetR, startingL, estimate)
 	switch nargin
 		case 1
 			showgraph = true;
