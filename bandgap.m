@@ -1,12 +1,20 @@
-function main(wl)
-	maxDandL = optRForEach(wl, false, 0.9, 115, false);
+function main(wl, startingL)
+	switch (nargin);
+		case 0
+			wl = 1000e-9;
+			startingL = 1;
+		case 1
+			startingL = 1;
+	end
+	maxDandL = optRForEach(wl, false, 0.7, startingL, false);
 
-	tiledlayout(2,2)
+	tiledlayout(2,2);
 	nexttile
 	wls = 325e-9:1e-9:1100e-9;
 	n_matrix = matDataToN("MoS2_monolayer_nk.xlsx", wls);
 	n_matrix = [ n_matrix, ones(size(n_matrix, 1), size(n_matrix, 2)) * 1.000293 ];
 	wls = 325e-9:1e-9:1100e-9;
+	hold on;
 	for i=1:1:size(wl, 1) * size(wl, 2)
 		l = maxDandL(i, 2);
 		for d = [maxDandL(i, 1) / 2, maxDandL(i,1), maxDandL(i, 1) * 2]
@@ -14,9 +22,9 @@ function main(wl)
 			rlist = plottmm(wls, n_matrix, d_list, l);
 			bandGapSize = calcBandGap(wl, wls, rlist);
 			plot(wls * 1e9, rlist, 'DisplayName', "Air thickness: " + d * 1e9 + " nm. Bandgap Size = " + bandGapSize, 'LineWidth' , 2.0)
-			hold on;
 		end
 	end
+	title("thickness");
 	xlabel("Wavelength (nm)");
 	ylabel("Resistance");
 	legend("location", "northwest");
@@ -27,13 +35,13 @@ function main(wl)
 	for i=1:1:size(wl, 1) * size(wl, 2)
 		d = [0.7e-9, maxDandL(i, 1) ];
 		for l = [ ceil(maxDandL(i, 2) / 2), maxDandL(i, 2), (maxDandL(i, 2) * 2) + 1]
-			disp(l);
 			rlist = plottmm(wls, n_matrix, d, l);
 			bandGapSize = calcBandGap(wl, wls, rlist);
 			plot(wls * 1e9, rlist, 'DisplayName', "monolayers: " + (l+1)/2 + ". Bandgap Size = " + bandGapSize, 'LineWidth' , 2.0)
 			hold on;
 		end
 	end
+	title("layers");
 	xlabel("Wavelength (nm)");
 	ylabel("Resistance");
 	legend("location", "northwest");
@@ -44,14 +52,15 @@ function main(wl)
 	for i=1:1:size(wl, 1) * size(wl, 2)
 		l = maxDandL(i, 2);
 		d = [0.7e-9, maxDandL(i, 1) ];
-		for k = [1/2, 1, 2]
-			n_chg = real(n_matrix) + k*imag(n_matrix);
+		for k = [1/100, 1, 2]
+			n_chg = real(n_matrix) + k*imag(n_matrix)*j;
 			rlist = plottmm(wls, n_chg, d, l);
 			bandGapSize = calcBandGap(wl, wls, rlist);
 			plot(wls * 1e9, rlist, 'DisplayName', "k = k*" + k + ". Bandgap Size = " + bandGapSize, 'LineWidth' , 2.0)
 			hold on;
 		end
 	end
+	title("imaginary")
 	xlabel("Wavelength (nm)");
 	ylabel("Resistance");
 	legend("location", "northwest");
@@ -61,23 +70,17 @@ function main(wl)
 	nexttile
 	for i=1:1:size(wl, 1) * size(wl, 2)
 		l = maxDandL(i, 2);
-		d = [0.7e-9, maxDandL(i, 1) ];
-		for n = [1/2, 1, 2]
-			n_chg = n*real(n_matrix) + imag(n_matrix);
-			rlist = plottmm(wls, n_chg, d, l);
-			bandGapSize = calcBandGap(wl, wls, rlist);
-			plot(wls * 1e9, rlist, 'DisplayName', "n = n*" + n + ". Bandgap Size = " + bandGapSize, 'LineWidth' , 2.0)
-			hold on;
-		end
+		d = [2.4e-9, maxDandL(i, 1) ];
+		rlist = plottmm(wls, n_chg, d - (2.4e-9 - 0.7e-9), 3);
+		plot(wls * 1e9, rlist) 
 	end
+	title("0.7nm to 100 nm");
 	xlabel("Wavelength (nm)");
 	ylabel("Resistance");
 	legend("location", "northwest");
-	hold off;
+	sgtitle("Bandgap tests");
 	exportResults(gca, "real");
 
-	set(gca, 'FontSize', 14);
-	print -dpdf -bestfit resultbandgap.pdf 
 end
 
 function rlist = plottmm(wls, n_matrix, d_list, l)
@@ -92,24 +95,26 @@ function rlist = plottmm(wls, n_matrix, d_list, l)
 end
  
 function bandgapSize = calcBandGap(wl, wls, rlist)
-	index = findPeak(wl, wls, rlist);
-	last = index;
-	startLeft = index-1;
+	index = find(abs(wls - wl) < 0.1e-9, 1)
+	startLeft = index;
 
-	while(rlist(startLeft)-rlist(last) > 0)
-		last = startLeft;
-		startLeft = startLeft-1;
+	disp(rlist(startLeft))
+	while(rlist(startLeft) > 0.05)
+		startLeft = startLeft-1
 	end
 
-	last = index;
-	startRight = index+1;
+	startRight = index;
 
-	while(rlist(startRight)-rlist(last) < 0)
-		last = startRight;
-		startRight = startRight+1;
+	while(rlist(startRight) > 0.05)
+		startRight = startRight+1
 	end
 
-	bandgapSize = startRight - startLeft;
+	bandgapSize = (wls(startRight) - wls(startLeft)) * 1e9
+	if (isempty(bandgapSize))
+		bandgapSize = -1;
+		return;
+	end
+
 end
 
 function peak = findPeak(wl, wls, rlist)
@@ -133,10 +138,5 @@ function peak = findPeak(wl, wls, rlist)
 end
 
 function exportResults(grph, name)
-	set(grph, 'FontSize', 14);
-	set(grph, 'FontSize', 14);
 	exportgraphics(grph, "resultsBandGap/" + name +  ".png");
 end
-
-
-
