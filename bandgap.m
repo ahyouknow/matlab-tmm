@@ -26,7 +26,7 @@ function main(wl, startingL)
 	end
 	title("thickness");
 	xlabel("Wavelength (nm)");
-	ylabel("Resistance");
+	ylabel("Reflection");
 	legend("location", "northwest");
 	hold off;
 	exportResults(gca, "thickness");
@@ -43,7 +43,7 @@ function main(wl, startingL)
 	end
 	title("layers");
 	xlabel("Wavelength (nm)");
-	ylabel("Resistance");
+	ylabel("Reflection");
 	legend("location", "northwest");
 	hold off;
 	exportResults(gca, "layers");
@@ -62,7 +62,7 @@ function main(wl, startingL)
 	end
 	title("imaginary")
 	xlabel("Wavelength (nm)");
-	ylabel("Resistance");
+	ylabel("Reflection");
 	legend("location", "northwest");
 	hold off;
 	exportResults(gca, "imaginary");
@@ -76,7 +76,7 @@ function main(wl, startingL)
 	end
 	title("0.7nm to 100 nm");
 	xlabel("Wavelength (nm)");
-	ylabel("Resistance");
+	ylabel("Reflection");
 	legend("location", "northwest");
 	sgtitle("Bandgap tests");
 	exportResults(gca, "real");

@@ -17,7 +17,7 @@ function [maxDandL maxR] = main(wls, showgraph, targetR, startingL, estimate)
 	end
 	n_list = matDataToN("MoS2_monolayer_nk.xlsx", wls);
 	n_matrix = [ n_list, 1.000293*ones(size(n_list, 1), 1) ];
-	d_mono = 0.7e-9;
+	d_mono = 0.9e-9;
 	maxDandL = [];
 	for i = 1:1:size(wls,1) * size(wls,2)
 		lList = [];
