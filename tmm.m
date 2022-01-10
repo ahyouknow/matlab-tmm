@@ -1,27 +1,7 @@
+% Main function: 
+% takes the list of refractive indicies, the list of thicknesses, how many layers there are, wavelength, angle of incident, and polarity
+% returns the reflection, and transfer percentages 
 function [r0,t0] = main(n_list, d_list, layerCount, wvl, initial_th_i, pol, n_first, n_last)
-	% Main tmm function
-	% tmm works by calculating a transmission matrix of one layer with fresnel's equation then
-	% since the wave propagate through the material there is a propagation matrix that calculates how
-	% much the wave changes within the material. Then that process is repeated for each layer in a unit cell.
-	% Since the only difference between a single unit cell's transfer matrix and 2 stacked unit cells are 
-	% the propagation matrix through the last layer and the transmission matrix from the last layer to the first layer.
-	% So the final transfer matrix is calculated by exponenting the product of the unit cell's transmission matrix 
-	% and the product of the last layer's propagation matrix and the first layer's transfer matrix. 
-	% 
-	% n_list is the list of index of refraction for each layer in the unit cell
-	% wvl is the wavelength of the light that is propagating through the stack in meters
-	% initial_th_i is the incident angle that the light first makes contact with the stack in radians
-	%
-	% n1 is the index of the material the light is coming from
-	% n2 is the index of the material the light is hitting
-	% th_i is the angle of incident in radians
-	% th_f is the angle of refraction in radians
-	% T_first is the transfer matrix from air to the first layer
-	% T_cell is the transmission matrix of the unit cell
-	% r0 is the final reflection coefficient 
-	% t0 is the final transmission coefficient
-	%
-
 	switch nargin
 		case 4
 			initial_th_i = 0;
@@ -101,6 +81,7 @@ function [r0,t0] = main(n_list, d_list, layerCount, wvl, initial_th_i, pol, n_fi
 					(real((n_first*cos(initial_th_i))));
 end
 
+% Calculates each layer's T and P matrix
 function [T_list, P_list] = matrix_list(n_list, d_list, th_f_list, wvl, pol);
 	n1 = n_list(size(n_list,2));
 	th_i = th_f_list(size(th_f_list, 2));
@@ -123,12 +104,10 @@ function [T_list, P_list] = matrix_list(n_list, d_list, th_f_list, wvl, pol);
 	P_list = p_list;
 end
 
+% Creates a list of all refracted angles for each layer
 function th_f_list = snells_list( n_list, initial_th_i);
 	n1   = 1;
-	n2   = n_list(1);
-	th_f = snells_law(n1, n2, initial_th_i);
-	temp = [th_f];
-	for i=2:1:size(n_list,2)
+	n2   = n_list(1); th_f = snells_law(n1, n2, initial_th_i); temp = [th_f]; for i=2:1:size(n_list,2)
 		n1 = n2;
 		n2 = n_list(i);
 		th_f = snells_law(n1, n2, th_f);
@@ -141,6 +120,7 @@ function th_f = snells_law(n1, n2, th_i);
 	 th_f = asin((n1/n2)*sin(th_i));
 end
 
+% Calculates the reflection and transmission of a layer using fresnel equations
 function [r,t] = rt_layer(n1, n2, th_i, th_f, pol);
 	if (pol == "s") 
 		[r t] = fresnel_S(n1, n2, th_i, th_f);
@@ -161,6 +141,7 @@ function [r,t] = fresnel_P(n1, n2, th_i, th_f)
 	t = (n1/n2)*(1 + r);
 end
 
+% Recursive exponential function. This makes it run a little bit faster than normal
 function result = expRec(A, n)
 	result = [1 0; 0 1];
 	if (n == 0)
